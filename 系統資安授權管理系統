@@ -1,0 +1,128 @@
+以下是針對**整合 Active Directory（AD）登入與授權**的 **ERP 系統安全管理機制開發建議書（整合版）**，適用於企業級部署環境。內容涵蓋 **企業身份驗證整合、角色授權控管、安全通訊、防禦設計**，並配合 AD 架構進行調整。
+
+---
+
+# 🛡️ ERP 系統安全管理機制開發建議書（整合 Active Directory 版本）
+
+## 一、目的
+
+本計畫旨在針對新建 ERP 系統，設計並實作一套企業級安全管理機制，整合 Active Directory（AD）為身分識別核心，結合嚴格的權限控管與網路安全防禦，支援混合式（內部 + 雲端）部署與多角色場景。
+
+---
+
+## 二、安全模組架構（AD 整合版）
+
+| 模組名稱                | 功能描述                             |
+| ------------------- | -------------------------------- |
+| AD 整合驗證（LDAP / SSO） | ERP 使用者可直接使用 Windows/Domain 帳號登入 |
+| 角色權限控管（RBAC）        | 與 AD 群組同步角色、自訂功能權限               |
+| 操作稽核（Audit Trail）   | 所有敏感動作與登入行為留痕                    |
+| 安全通訊（TLS / HTTPS）   | API 與資料傳輸全程加密                    |
+| 防禦強化（資安防護）          | 防止 SQL Injection、CSRF、暴力破解       |
+| 資料保護                | 密碼與敏感欄位加密、附件檔案存取控管               |
+| API 授權              | 基於 AD 使用者，整合 JWT 發 Token 授權      |
+
+---
+
+## 三、開發項目說明
+
+### 1. Active Directory 整合機制
+
+| 項目        | 說明                                                             |
+| --------- | -------------------------------------------------------------- |
+| LDAP 驗證   | 使用者登入時，系統使用 `System.DirectoryServices.Protocols` 或 Azure AD 驗證 |
+| 單一登入（SSO） | 支援 Windows Integrated Authentication 或 Azure SSO               |
+| 使用者與角色同步  | 自動將 AD 群組對應 ERP 角色（如業務、財務、管理者）                                 |
+| 使用者登入記錄   | 所有登入紀錄寫入稽核系統，異常觸發警示                                            |
+
+### 2. 角色與權限控管（RBAC + AD 群組）
+
+* 建立 AD → ERP 角色對映表，例如：
+
+  * AD 群組：`ERP_Sales` → ERP 角色：`SalesUser`
+  * AD 群組：`ERP_Admins` → ERP 角色：`SystemAdmin`
+* 支援多角色身分，動態調整可見功能
+* 管理介面支援查詢使用者角色與功能授權表
+
+### 3. API 安全與 JWT Token 發行
+
+* 使用 `Microsoft.AspNetCore.Authentication.JwtBearer` 搭配 `Microsoft.Identity.Web`
+* 登入後驗證 AD 身分，發行 JWT Token，供前端與外部系統 API 調用
+* Token 內容包含：
+
+  * 使用者帳號（UPN）
+  * 所屬群組（Roles）
+  * 登入時間與有效期
+
+### 4. 稽核日誌模組（行為留痕）
+
+* 記錄關鍵操作：
+
+  * 登入/登出
+  * 建立/修改/刪除報價單
+  * 存取報表/下載檔案
+* 日誌結構包含：
+
+  * 時間、帳號、動作類型、模組、IP、關聯資料主鍵
+
+### 5. 資安防護機制
+
+| 防禦項目          | 實作方式                                  |
+| ------------- | ------------------------------------- |
+| SQL Injection | 使用 EF Core 參數化查詢                      |
+| XSS           | 所有前端內容進行 HTML Encode                  |
+| CSRF          | 加入 AntiForgeryToken 與 SameSite Cookie |
+| AD 登入保護       | 登入錯誤次數限制，超過即鎖定或發送警示                   |
+| Session 管理    | Token 過期與強制登出機制                       |
+
+---
+
+## 四、開發技術與工具建議
+
+| 類型   | 技術/框架                                                         | 備註                  |
+| ---- | ------------------------------------------------------------- | ------------------- |
+| 驗證   | LDAP、Azure Active Directory、WindowsAuth                       | 支援 On-premise 與雲端整合 |
+| 身分授權 | `Microsoft.AspNetCore.Authentication.Negotiate` / `JwtBearer` | 支援 AD 驗證 + Token    |
+| RBAC | ASP.NET Core Policy-Based Authorization                       | 可整合 AD 群組           |
+| 稽核   | Serilog + SQL / Elasticsearch                                 | 快速查詢與搜尋             |
+| 加密   | AES-256, SHA-256, PBKDF2                                      | 儲存敏感資料              |
+| 安全測試 | OWASP ZAP、Burp Suite                                          | 資安掃描與滲透測試           |
+
+---
+
+## 五、專案分階段建置建議
+
+| 階段   | 項目               | 說明           |
+| ---- | ---------------- | ------------ |
+| 第一階段 | 基本登入機制 + AD 驗證整合 | 內部員工可透過域帳號登入 |
+| 第二階段 | 權限控管 + AD 群組角色對映 | 對應 ERP 模組授權  |
+| 第三階段 | 稽核模組 + API 授權    | 所有操作有記錄可追蹤   |
+| 第四階段 | 防禦模組 + 加密欄位      | 防範入侵與資料外洩    |
+| 第五階段 | 滲透測試 + 安全測試報告    | 強化資安合規與驗證    |
+
+---
+
+## 六、預期效益
+
+* 整合企業 AD，減少帳號管理成本與風險
+* 建立強化登入與授權機制，保護 ERP 關鍵模組
+* 實現登入與資料存取可追蹤、可防禦
+* 滿足企業資安合規（ISO 27001、CIS Control）
+
+---
+
+## 七、附件範本（可提供）
+
+* ✔ AD 驗證登入程式碼範例（LDAP / Azure AD）
+* ✔ AD 群組 → ERP 角色同步 SQL 程式
+* ✔ JWT Token 發行 + 授權 Middleware 程式碼
+* ✔ Serilog + MSSQL Audit Logging 設定
+* ✔ DevOps 環境資安設定建議清單
+
+---
+
+## ✅ 下一步建議
+
+是否要我為你 **直接產出整合 Active Directory 的 .NET 登入與權限管理程式碼骨架**（例如 `ADLoginController.cs` + `ADService.cs`）並打包為專案？或是先提供一份 Azure AD 與 JWT 整合的範例？
+
+請告訴我你的具體偏好（本地 AD / Azure AD / 混合式），我將為你客製化程式碼。
